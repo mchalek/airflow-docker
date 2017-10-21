@@ -5,9 +5,9 @@ RUN apt-get -qq update && \
         git \
         python-pip \
         # redis
-        redis-server redis-tools \
-        # install python mysql connector and mysql client
-        python-mysql.connector mysql-client \
+        redis-server \
+        # install mysql client and dev libraries, needed by python install
+        libmysqlclient-dev mysql-client \
         # software-properties-common provides the apt-add-repository command
         software-properties-common \
         # Also install vim for convenience in debugging etc
@@ -51,7 +51,7 @@ RUN mkdir -p $HOME/code && \
         --branch 1.8.2 \
         https://www.github.com/apache/incubator-airflow \
         $AIRFLOW_CODE_PATH && \
-    pip install -e $AIRFLOW_CODE_PATH[celery,gcp_api]
+    pip install -e $AIRFLOW_CODE_PATH[celery,gcp_api,mysql]
 
 # install mysql-server: TODO, remove this in favor of cloud SQL
 # Various fixes needed to get this to work:
