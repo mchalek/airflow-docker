@@ -13,24 +13,6 @@ RUN apt-get -qq update && \
         # Also install vim for convenience in debugging etc
         vim
 
-# install mysql-server: TODO, remove this in favor of cloud SQL
-# Various fixes needed to get this to work:
-#  1. Set default password for debconf prompts (see: https://gist.github.com/sheikhwaqas/9088872)
-#  2. Set table directory permissions (see: https://stackoverflow.com/questions/9083408/fatal-error-cant-open-and-lock-privilege-tables-table-mysql-host-doesnt-ex)
-#  3. Tell docker to store the contents of /var/lib/mysql as a VOLUME
-RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-selections && \
-    echo "mysql-server mysql-server/root_password_again password root" | debconf-set-selections && \
-    apt-get install -y -q mysql-server && \
-    service mysql start && \
-    mysql_secure_installation -proot -D && \
-    mysql -u root -p root --execute "
-        UNINSTALL PLUGIN validate_password;
-        CREATE DATABASE airflow;
-        CREATE USER 'airflow'@'localhost' IDENTIFIED BY 'airflow';
-        GRAINT ALL PRIVILEGES ON '*.*' TO 'airflow'@'localhost'"
-
-VOLUME /var/lib/mysql
-
 # install nginx
 RUN apt-add-repository -y ppa:nginx/stable && \
     apt-get -qq update && \
@@ -49,9 +31,13 @@ COPY config $HOME/config
 
 # Setup logging destinations for supervisor
 ENV SUPERVISOR_DIR=/var/log/supervisord \
-    SUPERVISOR_CHILD_LOG_DIR=$SUPERVISOR_DIR/child_logs
+    SUPERVISOR_CHILD_LOG_DIR=/var/log/supervisord/processes \
+    SUPERVISOR_PID_DIR=/var/run/supervisord
 
-RUN mkdir -p $SUPERVISOR_DIR $SUPERVISOR_CHILD_LOG_DIR
+RUN mkdir -p \
+    $SUPERVISOR_DIR \
+    $SUPERVISOR_CHILD_LOG_DIR \
+    $SUPERVISOR_PID_DIR
 
 # Finally, configure, download and install airflow
 ENV AIRFLOW_CODE_PATH=$HOME/code/incubator-airflow \
@@ -67,4 +53,24 @@ RUN mkdir -p $HOME/code && \
         $AIRFLOW_CODE_PATH && \
     pip install -e $AIRFLOW_CODE_PATH[celery,gcp_api]
 
-ENTRYPOINT [ "supervisord", "-c", "config/supervisord.conf" ]
+# install mysql-server: TODO, remove this in favor of cloud SQL
+# Various fixes needed to get this to work:
+#  1. Set default password for debconf prompts (see: https://gist.github.com/sheikhwaqas/9088872)
+#  2. Tell docker to store the contents of /var/lib/mysql as a VOLUME
+#  3. Remove the validate_password plugin because it dislikes our simple root password; see: https://stackoverflow.com/questions/36301100/how-do-i-turn-off-the-mysql-password-validation
+RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-selections && \
+    echo "mysql-server mysql-server/root_password_again password root" | debconf-set-selections && \
+    apt-get install -y -q mysql-server && \
+    service mysql start && \
+    mysql_secure_installation -proot -D && \
+    mysql --user=root --password=root --execute=" \
+        UNINSTALL PLUGIN validate_password; \
+        CREATE DATABASE airflow; \
+        CREATE USER 'airflow'@'localhost' IDENTIFIED BY 'airflow'; \
+        GRANT ALL PRIVILEGES ON *.* TO 'airflow'@'localhost';" && \
+    airflow initdb
+
+VOLUME /var/lib/mysql
+
+
+ENTRYPOINT [ "supervisord", "--nodaemon", "-c", "config/supervisord.conf" ]
