@@ -24,20 +24,11 @@ RUN pip install --upgrade pip redis
 ENV HOME=/home/airflow
 WORKDIR $HOME
 
-COPY config $HOME/config
-
-# Symbolic link for supervisor config, so that it's clear where this is installed
-RUN ln -s $HOME/config/airflow_supervisord.conf /etc/supervisor/conf.d/
-
 # Finally, configure, download and install airflow.  Also set C_FORCE_ROOT so that
 # celery will not refuse to function
 ENV AIRFLOW_CODE_PATH=$HOME/code/incubator-airflow \
     AIRFLOW_HOME=/home/airflow/airflow \
     C_FORCE_ROOT=true
-
-# Symbolic link for airflow.cfg, so that all configs live in the same place
-RUN mkdir -p $AIRFLOW_HOME && \
-    ln -s $HOME/config/airflow.cfg $AIRFLOW_HOME/airflow.cfg
 
 RUN mkdir -p $HOME/code && \
     git clone \
@@ -45,6 +36,9 @@ RUN mkdir -p $HOME/code && \
         https://www.github.com/apache/incubator-airflow \
         $AIRFLOW_CODE_PATH && \
     pip install -e $AIRFLOW_CODE_PATH[celery,gcp_api,mysql]
+
+# Install configuration
+COPY config/airflow.cfg $AIRFLOW_HOME/
 
 # install mysql-server: TODO, remove this in favor of cloud SQL
 # Various fixes needed to get this to work:
@@ -64,5 +58,9 @@ RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-s
     airflow initdb
 
 VOLUME /var/lib/mysql
+
+# Symbolic link for supervisor config, so that it's clear where this is installed
+COPY config $HOME/config
+RUN ln -s $HOME/config/airflow_supervisord.conf /etc/supervisor/conf.d/
 
 ENTRYPOINT [ "supervisord", "--nodaemon" ]
