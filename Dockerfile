@@ -4,14 +4,14 @@ RUN apt-get -qq update && \
     apt-get -qq install -y \
         git \
         python-pip \
-        # redis
+        supervisor \
         redis-server \
         # install mysql client and dev libraries, needed by python install
         libmysqlclient-dev mysql-client \
         # software-properties-common provides the apt-add-repository command
         software-properties-common \
-        # Also install vim for convenience in debugging etc
-        vim
+        # Also install some useful utilities for debugging
+        vim curl jq wget less
 
 # install nginx
 RUN apt-add-repository -y ppa:nginx/stable && \
@@ -19,30 +19,23 @@ RUN apt-add-repository -y ppa:nginx/stable && \
     apt-get install -y nginx
 
 # install some system-wide pip packages
-RUN pip install --upgrade \
-    pip \
-    supervisor \
-    redis
+RUN pip install --upgrade pip redis
 
 ENV HOME=/home/airflow
 WORKDIR $HOME
 
 COPY config $HOME/config
 
-# Setup logging destinations for supervisor
-ENV SUPERVISOR_DIR=/var/log/supervisord \
-    SUPERVISOR_CHILD_LOG_DIR=/var/log/supervisord/processes \
-    SUPERVISOR_PID_DIR=/var/run/supervisord
+# Symbolic link for supervisor config, so that it's clear where this is installed
+RUN ln -s $HOME/config/airflow_supervisord.conf /etc/supervisor/conf.d/
 
-RUN mkdir -p \
-    $SUPERVISOR_DIR \
-    $SUPERVISOR_CHILD_LOG_DIR \
-    $SUPERVISOR_PID_DIR
-
-# Finally, configure, download and install airflow
+# Finally, configure, download and install airflow.  Also set C_FORCE_ROOT so that
+# celery will not refuse to function
 ENV AIRFLOW_CODE_PATH=$HOME/code/incubator-airflow \
-    AIRFLOW_HOME=/home/airflow/airflow
+    AIRFLOW_HOME=/home/airflow/airflow \
+    C_FORCE_ROOT=true
 
+# Symbolic link for airflow.cfg, so that all configs live in the same place
 RUN mkdir -p $AIRFLOW_HOME && \
     ln -s $HOME/config/airflow.cfg $AIRFLOW_HOME/airflow.cfg
 
@@ -72,5 +65,4 @@ RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-s
 
 VOLUME /var/lib/mysql
 
-
-ENTRYPOINT [ "supervisord", "--nodaemon", "-c", "config/supervisord.conf" ]
+ENTRYPOINT [ "supervisord", "--nodaemon" ]
