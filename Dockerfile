@@ -38,7 +38,8 @@ RUN mkdir -p $HOME/code && \
     pip install -e $AIRFLOW_CODE_PATH[celery,gcp_api,mysql]
 
 # Install configuration
-COPY config/airflow.cfg $AIRFLOW_HOME/
+COPY config/airflow.cfg $HOME/config/
+RUN ln -s $HOME/config/airflow.cfg $AIRFLOW_HOME/airflow.cfg
 
 # install mysql-server: TODO, remove this in favor of cloud SQL
 # Various fixes needed to get this to work:
@@ -60,7 +61,7 @@ RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-s
 VOLUME /var/lib/mysql
 
 # Symbolic link for supervisor config, so that it's clear where this is installed
-COPY config $HOME/config
+COPY config/airflow_supervisord.conf $HOME/config
 RUN ln -s $HOME/config/airflow_supervisord.conf /etc/supervisor/conf.d/
 
 ENTRYPOINT [ "supervisord", "--nodaemon" ]
