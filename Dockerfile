@@ -32,14 +32,16 @@ ENV AIRFLOW_CODE_PATH=$HOME/code/incubator-airflow \
 
 RUN mkdir -p $HOME/code && \
     git clone \
-        --branch 1.8.2 \
+        --branch 1.9.0alpha1 \
         https://www.github.com/apache/incubator-airflow \
         $AIRFLOW_CODE_PATH && \
     pip install -e $AIRFLOW_CODE_PATH[celery,gcp_api,mysql]
 
 # Install configuration
 COPY config/airflow.cfg $HOME/config/
-RUN ln -s $HOME/config/airflow.cfg $AIRFLOW_HOME/airflow.cfg
+COPY code/incubator-airflow/airflow/example_dags/*.py $AIRFLOW_HOME/dags/
+RUN mkdir -p $AIRFLOW_HOME/logs && \
+    ln -s $HOME/config/airflow.cfg $AIRFLOW_HOME/airflow.cfg
 
 # install mysql-server: TODO, remove this in favor of cloud SQL
 # Various fixes needed to get this to work:
@@ -60,6 +62,7 @@ RUN echo "mysql-server mysql-server/root_password password root" | debconf-set-s
 
 VOLUME /var/lib/mysql
 
+COPY config/mysqld.cnf /etc/mysql/mysql.conf.d/
 # Symbolic link for supervisor config, so that it's clear where this is installed
 COPY config/airflow_supervisord.conf $HOME/config
 RUN ln -s $HOME/config/airflow_supervisord.conf /etc/supervisor/conf.d/
